@@ -1,70 +1,162 @@
-import pandas as pd
-from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import MinMaxScaler
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.spatial.distance import euclidean
 
-# Sample company dataset
-company_data = {
-    'Company': ['Acme Inc.', 'Globex Corporation', 'TechSavvy Solutions', 'DataDynamic', 'EnergySmart'],
-    'Industry': ['Technology', 'Manufacturing', 'IT Services', 'Data Analytics', 'Energy'],
-    'Skills Needed': [['Python', 'Data Analysis', 'Machine Learning'],
-                     ['Project Management', 'CAD', 'Mechanical Engineering'],
-                     ['Web Development', 'Cloud Computing', 'Cybersecurity'],
-                     ['SQL', 'Statistics', 'Visualization'],
-                     ['Renewable Energy', 'Electrical Engineering', 'Energy Efficiency']],
-    'Openings': [5, 3, 8, 4, 2]
+# Skill categories for Conexxaa
+categories = [
+    "Technical Proficiency", "Project Management", "Data Analysis", 
+    "Communication & Collaboration", "Problem-Solving", "Leadership & Initiative", 
+    "Adaptability & Flexibility", "Client Relationship Management", 
+    "Research & Development", "Industry-Specific Knowledge"
+]
+
+# Default company profiles with roles and their corresponding skill requirements
+companies = {
+    "Tata Consultancy Services (TCS)": {
+        "Software Engineer": [10, 6, 7, 7, 9, 5, 8, 6, 6, 7],
+        "IT Analyst": [9, 7, 8, 9, 8, 7, 7, 8, 5, 8]
+    },
+    "Infosys": {
+        "Software Developer": [10, 6, 7, 8, 9, 6, 8, 7, 7, 7],
+        "Systems Engineer": [9, 7, 6, 8, 8, 6, 7, 7, 6, 7]
+    },
+    "Wipro": {
+        "Software Engineer": [10, 5, 7, 7, 9, 6, 8, 6, 5, 7],
+        "Data Scientist": [10, 6, 10, 8, 9, 7, 7, 6, 8, 7]
+    },
+    "Accenture": {
+        "Technology Consultant": [8, 7, 6, 9, 8, 7, 8, 9, 7, 8],
+        "Software Engineer": [10, 6, 7, 7, 9, 6, 8, 6, 5, 7]
+    },
+    "Zoho": {
+        "Software Developer": [10, 6, 7, 7, 9, 6, 8, 6, 6, 7],
+        "Product Engineer": [10, 6, 7, 8, 9, 7, 8, 6, 8, 7]
+    }
 }
 
-company_df = pd.DataFrame(company_data)
+# Minimum skill requirement thresholds for eligibility
+skill_thresholds = {
+    "Technical Proficiency": 7,
+    "Project Management": 5,
+    "Data Analysis": 6,
+    "Communication & Collaboration": 6,
+    "Problem-Solving": 7,
+    "Leadership & Initiative": 5,
+    "Adaptability & Flexibility": 6,
+    "Client Relationship Management": 6,
+    "Research & Development": 5,
+    "Industry-Specific Knowledge": 5
+}
 
-def get_user_profile():
-    print("Welcome to Mentor Connect!")
-    print("Please fill out your profile to get matched with companies.")
+# Function to calculate the rank based on similarity of skills using Euclidean distance
+def match_companies(student_skills, selected_companies):
+    rankings = []
+    ineligible_feedback = []
+    
+    for company, roles in companies.items():
+        if company not in selected_companies:
+            continue  # Skip companies that are not in the selected list
+            
+        for role, requirements in roles.items():
+            # Check if student meets the minimum skill thresholds for the role
+            below_threshold = [
+                categories[i] for i in range(len(student_skills)) 
+                if student_skills[i] < skill_thresholds[categories[i]]
+            ]
+            
+            if below_threshold:
+                # Suggest the most closely related skills that need improvement (top 2)
+                closest_skills = get_top_closest_skills(student_skills, below_threshold)
+                ineligible_feedback.append((company, role, closest_skills))
+                continue  # Skip this company/role if the student doesn't meet the eligibility
+            
+            # Calculate Euclidean distance if eligible
+            distance = np.linalg.norm(np.array(student_skills) - np.array(requirements))
+            rankings.append((company, role, distance))
+    
+    # Sort by Euclidean distance (lower is better)
+    rankings.sort(key=lambda x: x[2])
+    
+    return rankings, ineligible_feedback
 
-    name = input("What is your name? ")
-    skills = input("What are your skills (comma-separated)? ").split(',')
-    interests = input("What are your academic interests (comma-separated)? ").split(',')
-    goals = input("What are your career goals? ")
+# Function to find the top 2 closest skills to the threshold
+def get_top_closest_skills(student_skills, below_threshold):
+    skill_gaps = {}
+    
+    for skill in below_threshold:
+        skill_index = categories.index(skill)
+        gap = skill_thresholds[skill] - student_skills[skill_index]
+        skill_gaps[skill] = gap
+    
+    # Sort by gap and return the top 2 closest skills
+    sorted_skills = sorted(skill_gaps.items(), key=lambda x: x[1])[:2]
+    return [skill for skill, _ in sorted_skills]
 
-    return {'Name': name, 'Skills': [skill.strip() for skill in skills],
-            'Interests': [interest.strip() for interest in interests], 'Goals': goals}
+# Input: Student's skill profile
+student_skills = [int(input(f"Enter your skill level for {category} : ")) for category in categories]
 
-def match_companies(user_profile):
-    # Create a feature matrix from the company data
-    X = []
-    for skills in company_data['Skills Needed']:
-        skill_vector = [int(skill in skills) for skill in user_profile['Skills']]
-        X.append(skill_vector)
-    X = pd.DataFrame(X)
+# Specify which companies to focus on (TCS and Infosys)
+selected_companies = ["Tata Consultancy Services (TCS)", "Infosys"]
 
-    # Normalize the feature matrix
-    scaler = MinMaxScaler()
-    X_scaled = scaler.fit_transform(X)
+# Get matching companies and roles
+rankings, ineligible_feedback = match_companies(student_skills, selected_companies)
 
-    # Train the KNN model
-    knn = NearestNeighbors(n_neighbors=3)
-    knn.fit(X_scaled)
+# Display rankings and ineligible feedback for the selected companies
+if rankings:
+    print("\nEligible Matches:")
+    for i, (company, role, distance) in enumerate(rankings[:3], 1):  # Display only top 3 matches
+        print(f"Rank {i}: {company} - {role}")
+else:
+    print("No eligible matches found based on your skills.")
 
-    # Find the closest companies to the user's profile
-    user_skills = [int(skill in user_profile['Skills']) for skill in company_data['Skills Needed'][0]]
-    user_skills_scaled = scaler.transform([user_skills])
-    distances, indices = knn.kneighbors(user_skills_scaled)
+# Provide detailed feedback only on the non-eligible roles for the selected companies
+print("\nEligibility Feedback for Non-Eligible Companies and Roles:")
+for company, roles in companies.items():
+    if company not in selected_companies:
+        continue  # Skip companies that are not in the selected list
+        
+    for role, requirements in roles.items():
+        # Check eligibility
+        below_threshold = [
+            categories[i] for i in range(len(student_skills)) 
+            if student_skills[i] < skill_thresholds[categories[i]]
+        ]
+        
+        if below_threshold:
+            # Suggest top 2 closest skills to improve
+            closest_skills = get_top_closest_skills(student_skills, below_threshold)
+            print(f"{company} - {role}: Suggest improving: {', '.join(closest_skills)}")
 
-    # Return the matched company names
-    return [company_data['Company'][i] for i in indices[0]]
+# Plotting the skills comparison for top ranked company and role
+if rankings:
+    top_match = rankings[0]
+    top_company = top_match[0]
+    top_role = top_match[1]
+    top_requirements = companies[top_company][top_role]
 
-def main():
-    user_profile = get_user_profile()
-    print("\nYour profile:")
-    for key, value in user_profile.items():
-        print(f"{key}: {value}")
+    # Plotting the skills comparison
+    x = range(len(categories))
 
-    matches = match_companies(user_profile)
-    if matches:
-        print("\nTop 3 matching companies:")
-        for company in matches:
-            print(f"- {company}")
-    else:
-        print("\nSorry, no companies currently match your profile. Please try again later.")
+    plt.figure(figsize=(12, 6))
 
-if __name__ == "__main__":
-    main()
+    # Plot the student's skills
+    plt.plot(x, student_skills, marker='o', label='Student', color='blue')
+
+    # Plot the top company's skill requirements for the matched role
+    plt.plot(x, top_requirements, marker='o', label=f'{top_company} - {top_role}', color='orange')
+
+    # Adding titles and labels
+    plt.title(f'Skill Profile Comparison: Student vs. {top_company} - {top_role}')
+    plt.xlabel('Skill Categories')
+    plt.ylabel('Skill Ratings')
+    plt.xticks(x, categories, rotation=45, ha='right')
+    plt.ylim(0, 10)
+    plt.axhline(y=0, color='k', linestyle='--', lw=1)
+    plt.legend()
+    plt.grid(True)
+
+    # Show the plot
+    plt.tight_layout()
+    plt.show()
+else:
+    print("No eligible matches.")
